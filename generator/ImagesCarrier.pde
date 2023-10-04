@@ -11,23 +11,27 @@ class ImagesCarrier {
   private boolean waitingFitness = false;
 
   ImagesCarrier(boolean keepImages) {
+    this.keepImages = keepImages;
+    
     // Set folder where images will be saved to be evaluated by Python
-    this.dirOutputImages = Paths.get(dataPath("output_images"), "run_" + System.nanoTime()).toFile();
+    String dirParent = new File(sketchPath()).getParent();
+    this.dirOutputImages = Paths.get(dirParent, "images", "run_" + System.nanoTime()).toFile();
     if (this.dirOutputImages.exists()) {
       throw new RuntimeException("Output images directory already exists.");
     }
 
     // Set paths of proxy files that will be used to communicate with Python
-    this.fileWithImagesPaths = Paths.get(sketchPath(), "images_paths.txt").toFile();
-    this.fileWithImagesFitness = Paths.get(sketchPath(), "images_fitness.txt").toFile();
-    if (this.fileWithImagesPaths.exists()) {
-      this.fileWithImagesPaths.delete();
+    this.fileWithImagesPaths = Paths.get(dirParent, "images_paths.txt").toFile();
+    this.fileWithImagesFitness = Paths.get(dirParent, "images_fitness.txt").toFile();
+    
+    // Delete files at start and shutdown 
+    cleanFiles();
+    Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+      public void run() {
+        cleanFiles();
+      }
     }
-    if (this.fileWithImagesFitness.exists()) {
-      this.fileWithImagesFitness.delete();
-    }
-
-    this.keepImages = keepImages;
+    ));
   }
 
   void send(ArrayList<PImage> images) {
@@ -37,40 +41,35 @@ class ImagesCarrier {
   }
 
   void send(PImage[] images) {
-    Path dirCurrSetOutputImages = Paths.get(this.dirOutputImages.getPath(), dataPath("" + System.nanoTime()));
+    Path dirCurrSetOutputImages = Paths.get(this.dirOutputImages.getPath(), "batch_" + System.nanoTime());
 
     String[] imagesPaths = new String[images.length];
     for (int i = 0; i < images.length; i++) {
-      imagesPaths[i] = dirCurrSetOutputImages.resolve(nf(i, 8) + ".png").toString();
+      imagesPaths[i] = dirCurrSetOutputImages.resolve(nf(i + 1, 8) + ".png").toString();
       images[i].save(imagesPaths[i]);
     }
-    saveStrings(fileWithImagesPaths.getPath(), imagesPaths);
-    
-    waitingFitness = true;
+    saveStrings(this.fileWithImagesPaths.getPath(), imagesPaths);
+
+    this.waitingFitness = true;
   }
 
   float[] getResponse() {
     // Return null if response file does not exist
-    if (fileWithImagesFitness.exists() == false) {
+    if (this.fileWithImagesFitness.exists() == false) {
       return null;
     }
 
     // Load fitness values from file
-    String[] lines = loadStrings(fileWithImagesFitness.getPath());
+    String[] lines = loadStrings(this.fileWithImagesFitness.getPath());
     float[] fitnessValues = new float[lines.length];
     for (int i = 0; i < lines.length; i++) {
       fitnessValues[i] = Float.parseFloat(lines[i]);
     }
 
-    // Remove response file
-    fileWithImagesFitness.delete();
-
-    // Delete images saved to disk
-    if (keepImages == false) {
-      deleteRecursively(this.dirOutputImages);
-    }
+    // Delete files
+    this.cleanFiles();
     
-    waitingFitness = false;
+    this.waitingFitness = false;
 
     // Return retrieved fitness values
     return fitnessValues;
@@ -86,9 +85,21 @@ class ImagesCarrier {
       }
     }
   }
-  
+
   boolean waitingFitness() {
-    return waitingFitness;
+    return this.waitingFitness;
+  }
+
+  void cleanFiles() {
+    if (this.fileWithImagesPaths.exists()) {
+      this.fileWithImagesPaths.delete();
+    }
+    if (this.fileWithImagesFitness.exists()) {
+      this.fileWithImagesFitness.delete();
+    }
+    if (keepImages == false) {
+      deleteRecursively(this.dirOutputImages);
+    }
   }
 }
 
