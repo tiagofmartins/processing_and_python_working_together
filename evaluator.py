@@ -41,6 +41,6 @@ if __name__ == '__main__':
                 os.remove(path_file_images_paths)
 
                 print('Waiting for images')
-            time.sleep(0.5)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         pass
